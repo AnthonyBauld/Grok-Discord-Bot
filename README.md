@@ -8,7 +8,7 @@ This Discord bot uses Grok's 3.0 model to answer user prompts when the bot is me
 
 - Python 3.9+
 - A Discord bot token (from [Discord Developer Portal](https://discord.com/developers/applications))
-- A Grok API key (from [xAI Developer Console)](https://docs.x.ai/docs/overview)
+- A Grok API key (from [xAI Developer Console](https://docs.x.ai/docs/overview))
 - `pip` (Python package installer)
   
 ---
