@@ -7,13 +7,12 @@ from io import BytesIO
 from openai import OpenAI, OpenAIError
 import tiktoken
 import logging
-import asyncio
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
-import re
-from discord import File
+import asyncio
 
-# Configure logging
+# Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -22,48 +21,137 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 
-# Validate environment variables
 if not DISCORD_TOKEN or not GROK_API_KEY:
     raise ValueError("Missing required environment variables: DISCORD_TOKEN or GROK_API_KEY")
 
-# Initialize OpenAI client for xAI API
+# Initialize OpenAI client
 client = OpenAI(api_key=GROK_API_KEY, base_url="https://api.x.ai/v1")
 
+# Constants
 MODEL = "grok-3-beta"
 MAX_TOKENS = 128000
-MAX_RESPONSE_TOKENS = 400  # ~500 words (0.75 tokens/word)
-RATE_LIMIT = 5  # Max 5 requests per minute per user
-COOLDOWN_SECONDS = 60 / RATE_LIMIT
-DISCORD_MAX_CHARS = 1800  # Target slightly below Discord's 2000-char limit
+MAX_RESPONSE_TOKENS = 400
+RATE_LIMIT = 5  # requests per minute per user
+DISCORD_MAX_CHARS = 1800  # safe limit below Discord's 2000 char limit
 
+# Discord intents and bot setup
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)  # Disable default help command
 
-# Note: PyNaCl is not installed, so voice features are disabled. Install with `pip install PyNaCl` if needed.
+bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-# Store conversation history per user/channel
-conversation_history = defaultdict(list)
-# Track user request timestamps for rate limiting
-user_requests = defaultdict(list)
+# State tracking
+conversation_history = defaultdict(list)  # key: userID_channelID, value: list of messages
+user_requests = defaultdict(list)         # key: userID, value: list of request timestamps
 
-def is_image_generation_request(content):
-    """Check if the message is requesting image generation."""
+# Utility functions
+
+def is_image_generation_request(content: str) -> bool:
+    """Detect if user is requesting image generation."""
     return bool(re.search(r'\b(generate|create|make|draw)\b.*\b(image|picture|art|photo)\b', content, re.IGNORECASE))
 
-def is_simple_question(content):
-    """Determine if the question is simple based on length or keywords."""
+def is_simple_question(content: str) -> bool:
+    """Detect if question is simple based on keywords or length."""
     content = content.lower().strip()
-    # Short questions (< 10 words) or common factual queries
     if len(content.split()) < 10:
         return True
-    # Keywords for simple factual questions
     simple_keywords = ['what is', 'who is', 'when is', 'where is', 'how many', 'define']
     return any(content.startswith(keyword) for keyword in simple_keywords)
 
-async def generate_image(prompt):
-    """Generate an image using FLUX.1 via Grok API."""
+def truncate_to_char_limit(text: str, max_chars: int) -> str:
+    """Truncate text to max_chars, trying to cut at sentence or word boundary."""
+    if len(text) <= max_chars:
+        return text
+    cutoff = text[:max_chars].rfind('.')
+    if cutoff == -1:
+        cutoff = text[:max_chars].rfind(' ')
+    if cutoff == -1:
+        cutoff = max_chars - 100
+    summary = "... (response shortened to fit Discord's 2000-character limit)"
+    return text[:cutoff] + summary
+
+def truncate_history(messages: list, max_tokens: int) -> list:
+    """Truncate conversation history to fit within max_tokens."""
+    encoding = tiktoken.get_encoding("cl100k_base")
+    total_tokens = 0
+    truncated = []
+    for msg in reversed(messages):
+        msg_tokens = len(encoding.encode(msg["content"]))
+        if total_tokens + msg_tokens <= max_tokens:
+            truncated.insert(0, msg)
+            total_tokens += msg_tokens
+        else:
+            break
+    return truncated
+
+def build_system_prompt(is_simple: bool) -> tuple:
+    """Return system prompt and max tokens based on question complexity."""
+    if is_simple:
+        prompt = (
+            "Answer directly and concisely in plain language. "
+            "Keep your answer under 350 characters and 2-3 sentences. "
+            "Do not over-explain or elaborate. Only state the essential facts."
+        )
+        max_tokens = 100
+    else:
+        prompt = (
+            "Answer clearly and concisely. "
+            "Keep your answer under 1800 characters, focusing on main points. "
+            "Avoid unnecessary detail or repetition."
+        )
+        max_tokens = MAX_RESPONSE_TOKENS
+    return {"role": "system", "content": prompt}, max_tokens
+
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    """Extract text from PDF bytes."""
+    reader = PdfReader(BytesIO(file_bytes))
+    text = ""
+    for page in reader.pages:
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted
+    if not text:
+        raise ValueError("No text could be extracted from the PDF")
+    return text
+
+def truncate_text(text: str, max_chars: int) -> str:
+    """Simple truncation to max_chars."""
+    return text[:max_chars] if len(text) > max_chars else text
+
+def query_grok_sync(messages: list, is_simple: bool) -> str:
+    """Synchronous Grok API call with retry for length."""
+    try:
+        system_prompt, max_tokens = build_system_prompt(is_simple)
+        full_messages = [system_prompt] + messages
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=full_messages,
+            temperature=0.7,
+            max_tokens=max_tokens,
+            stream=False
+        )
+        response_text = response.choices[0].message.content.strip()
+
+        # Retry with stricter prompt if too long
+        if len(response_text) > DISCORD_MAX_CHARS:
+            system_prompt["content"] += " Make your answer even shorter and more direct."
+            full_messages = [system_prompt] + messages
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=full_messages,
+                temperature=0.7,
+                max_tokens=max_tokens // 2,
+                stream=False
+            )
+            response_text = response.choices[0].message.content.strip()
+
+        return response_text
+    except OpenAIError as e:
+        raise
+
+async def generate_image(prompt: str) -> str:
+    """Generate image URL via Grok API."""
     try:
         response = client.images.generate(
             model="flux.1",
@@ -77,18 +165,7 @@ async def generate_image(prompt):
         logger.error(f"Image generation error: {str(e)}")
         raise
 
-def truncate_to_char_limit(text, max_chars):
-    """Truncate or summarize text to fit within Discord's character limit, preserving coherence."""
-    if len(text) <= max_chars:
-        return text
-    # Find the last period or space before the limit
-    cutoff = text[:max_chars].rfind('.')
-    if cutoff == -1:
-        cutoff = text[:max_chars].rfind(' ')
-    if cutoff == -1:
-        cutoff = max_chars - 100  # Reserve space for summary
-    summary = "... (response shortened due to Discord's 2000-character limit; key points summarized)"
-    return text[:cutoff] + summary
+# Discord event handlers
 
 @bot.event
 async def on_ready():
@@ -96,7 +173,6 @@ async def on_ready():
 
 @bot.command(name="help")
 async def help_command(ctx):
-    """Provide help information for the bot."""
     help_text = (
         "**Grok Bot Help**\n"
         "How to use the bot:\n"
@@ -112,27 +188,16 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # Rate limiting
-    now = datetime.utcnow()
-    user_id = message.author.id
-    user_requests[user_id] = [t for t in user_requests[user_id] if now - t < timedelta(seconds=60)]
-    if len(user_requests[user_id]) >= RATE_LIMIT:
-        await message.reply("You're sending requests too quickly! Please wait a moment.", mention_author=False)
-        return
-    user_requests[user_id].append(now)
-
-    content = None
+    content = message.content.strip()
     is_reply_to_bot = False
     history_key = f"{message.author.id}_{message.channel.id}"
 
-    # Check if the message is a reply to the bot
+    # Check if message is reply to bot
     if message.reference and message.reference.resolved:
-        referenced_message = message.reference.resolved
-        if referenced_message.author == bot.user:
+        if message.reference.resolved.author == bot.user:
             is_reply_to_bot = True
-            content = message.content.strip()
 
-    # Handle PDF attachments
+    # Handle PDF or image attachments
     for attachment in message.attachments:
         if attachment.filename.endswith(".pdf"):
             try:
@@ -144,26 +209,26 @@ async def on_message(message):
                 logger.error(f"PDF processing error: {str(e)}")
                 await message.reply(f"[PDF Error] Failed to process PDF: {str(e)}", mention_author=False)
                 return
-
-    # Handle image attachments (not supported for processing)
-    for attachment in message.attachments:
-        if attachment.filename.lower().endswith((".jpg", ".jpeg", ".png")):
+        elif attachment.filename.lower().endswith((".jpg", ".jpeg", ".png")):
             content = f"Image uploaded: {attachment.filename} (image analysis not supported, try generating an image instead)"
             break
 
-    # Process text input if it's a mention or a reply to the bot
+    # Process if mention or reply
     if message.content.startswith(f"<@{bot.user.id}>") or is_reply_to_bot:
         if message.content.startswith(f"<@{bot.user.id}>"):
-            query = message.content.replace(f"<@{bot.user.id}>", "").strip()
-            if not content:
-                content = query
-
-        if not content:
-            content = message.content.strip()
+            content = message.content.replace(f"<@{bot.user.id}>", "").strip()
 
         if content:
+            now = datetime.utcnow()
+            user_id = message.author.id
+            # Clean up old requests for rate limiting
+            user_requests[user_id] = [t for t in user_requests[user_id] if now - t < timedelta(seconds=60)]
+            if len(user_requests[user_id]) >= RATE_LIMIT:
+                return  # silently ignore excess requests
+            user_requests[user_id].append(now)
+
             async with message.channel.typing():
-                # Check for image generation request
+                # Image generation path
                 if is_image_generation_request(content):
                     try:
                         image_url = await generate_image(content)
@@ -174,16 +239,26 @@ async def on_message(message):
                         await message.reply(f"[Image Generation Error] {str(e)}", mention_author=False)
                     return
 
-                # Add user message to history
+                # Add user message to history and truncate
                 conversation_history[history_key].append({"role": "user", "content": content})
-                conversation_history[history_key][:] = truncate_history(conversation_history[history_key], MAX_TOKENS - MAX_RESPONSE_TOKENS - 50)  # Reserve tokens for system prompt
+                conversation_history[history_key][:] = truncate_history(conversation_history[history_key], MAX_TOKENS - MAX_RESPONSE_TOKENS - 50)
 
                 try:
-                    response_text = await query_grok(conversation_history[history_key], is_simple_question(content))
+                    loop = asyncio.get_running_loop()
+                    response_text = await loop.run_in_executor(
+                        None,
+                        query_grok_sync,
+                        conversation_history[history_key],
+                        is_simple_question(content)
+                    )
                     conversation_history[history_key].append({"role": "assistant", "content": response_text})
-                    # Truncate to Discord's character limit if necessary
+
+                    # Clean and truncate response
+                    response_text = re.sub(r'\(Character count: \d+\)', '', response_text).strip()
                     response_text = truncate_to_char_limit(response_text, DISCORD_MAX_CHARS)
+
                     await message.reply(response_text, mention_author=False)
+
                 except OpenAIError as e:
                     logger.error(f"Grok API error: {str(e)}")
                     await message.reply(f"[Grok API Error] {str(e)}", mention_author=False)
@@ -192,77 +267,6 @@ async def on_message(message):
                     await message.reply(f"[Unexpected Error] {str(e)}", mention_author=False)
 
     await bot.process_commands(message)
-
-async def query_grok(messages, is_simple):
-    try:
-        # Choose system prompt based on question complexity
-        if is_simple:
-            system_prompt = {
-                "role": "system",
-                "content": "Provide a brief, accurate answer in under 100 words and 500 characters, focusing on key facts without elaboration."
-            }
-            max_tokens = min(MAX_RESPONSE_TOKENS, 100)  # Limit tokens for simple questions
-        else:
-            system_prompt = {
-                "role": "system",
-                "content": "Provide a complete and accurate answer in under 500 words and 1800 characters, prioritizing brevity while fully addressing the query. Avoid unnecessary elaboration."
-            }
-            max_tokens = MAX_RESPONSE_TOKENS
-
-        full_messages = [system_prompt] + messages
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=full_messages,
-            temperature=0.7,
-            max_tokens=max_tokens,
-            stream=False
-        )
-        response_text = response.choices[0].message.content.strip()
-        # Retry if response exceeds character limit
-        if len(response_text) > DISCORD_MAX_CHARS:
-            system_prompt["content"] = system_prompt["content"].replace("1800 characters", "1500 characters").replace("500 characters", "400 characters").replace("500 words", "400 words").replace("100 words", "80 words")
-            full_messages = [system_prompt] + messages
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=full_messages,
-                temperature=0.7,
-                max_tokens=max_tokens - 100,  # Reduce tokens for retry
-                stream=False
-            )
-            response_text = response.choices[0].message.content.strip()
-        return response_text
-    except OpenAIError as e:
-        raise
-
-def extract_text_from_pdf(file_bytes):
-    reader = PdfReader(BytesIO(file_bytes))
-    text = ""
-    for page in reader.pages:
-        extracted = page.extract_text()
-        if extracted:
-            text += extracted
-    if not text:
-        raise ValueError("No text could be extracted from the PDF")
-    return text
-
-def truncate_text(text, max_chars):
-    """Truncate text to a maximum character length."""
-    return text[:max_chars] if len(text) > max_chars else text
-
-def truncate_history(messages, max_tokens):
-    """Truncate conversation history to stay within token limits."""
-    encoding = tiktoken.get_encoding("cl100k_base")
-    total_tokens = 0
-    truncated_messages = []
-    
-    for msg in reversed(messages):
-        msg_tokens = len(encoding.encode(msg["content"]))
-        if total_tokens + msg_tokens <= max_tokens:
-            truncated_messages.insert(0, msg)
-            total_tokens += msg_tokens
-        else:
-            break
-    return truncated_messages
 
 # Run the bot
 bot.run(DISCORD_TOKEN)
