@@ -71,7 +71,7 @@ The bot will:
 
 | Error                      | Solution                                           |
 |----------------------------|---------------------------------------------------|
-| API quota exceeded          | You’ve hit your Grok limit. Check xAI Console |
+| API quota exceeded          | You’ve hit your Grok limit. Check xAI Developer Console |
 | content must be 2000 or fewer in length | Message too long. Grok limits apply. Keep user prompts short. |
 | ModuleNotFoundError        | Run pip install commands again or check your Python environment |
 | Bot doesn’t reply          | Ensure MESSAGE CONTENT INTENT is enabled in Discord Dev Portal |
