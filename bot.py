@@ -157,7 +157,7 @@ async def on_ready():
 # Discord event: Handle incoming messages
 @bot.event
 async def on_message(message):
-    """Process messages, respond to mentions, replies, or attachments."""
+    """Process messages, respond to mentions, replies, or PDF attachments."""
     if message.author == bot.user:
         return  # Ignore bot's own messages
 
@@ -174,26 +174,25 @@ async def on_message(message):
     elif message.reference and message.reference.resolved and message.reference.resolved.author == bot.user:
         should_process = True
 
-    # Handle file attachments
-    for attachment in message.attachments:
-        if attachment.filename.endswith(".pdf"):
-            try:
-                # Read PDF bytes
-                file_bytes = await attachment.read()
-                content = extract_text_from_pdf(file_bytes)
-                should_process = True
-                break
-            except Exception as e:
-                logger.error(f"PDF error: {str(e)}")
-                await message.reply(f"[PDF Error] {str(e)}", mention_author=False)
-                return
-        elif attachment.filename.lower().endswith((".jpg", ".jpeg", ".png")):
-            # Note image upload (no analysis)
-            content = f"Image uploaded: {attachment.filename} (analysis not supported)"
-            should_process = True
-            break
+    # Handle file attachments only if bot is mentioned or replied to
+    if should_process:
+        for attachment in message.attachments:
+            if attachment.filename.endswith(".pdf"):
+                try:
+                    # Read PDF bytes
+                    file_bytes = await attachment.read()
+                    content = extract_text_from_pdf(file_bytes)
+                    break  # Process PDF and proceed to response
+                except Exception as e:
+                    logger.error(f"PDF error: {str(e)}")
+                    await message.reply(f"[PDF Error] {str(e)}", mention_author=False)
+                    return
+            elif attachment.filename.lower().endswith((".jpg", ".jpeg", ".png")):
+                # Respond only for direct image uploads
+                await message.reply("Image handling is not supported.", mention_author=False)
+                return  # Stop further processing
 
-    # Process valid messages
+    # Process valid text or PDF-based messages
     if should_process and content:
         async with message.channel.typing():
             if is_image_generation_request(content):
