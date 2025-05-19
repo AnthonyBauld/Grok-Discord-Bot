@@ -128,23 +128,6 @@ async def query_grok(messages: list, is_simple: bool) -> str:
         logger.error(f"Grok API error: {str(e)}")
         raise
 
-# Async function: Generate image via Grok API
-async def generate_image(prompt: str) -> str:
-    """Generate an image and return its URL."""
-    try:
-        # Call Grok image generation API
-        response = await client.images.generate(
-            model="flux.1",
-            prompt=prompt,
-            size="1024x1024",
-            quality="standard",
-            n=1
-        )
-        return response.data[0].url
-    except OpenAIError as e:
-        logger.error(f"Image generation error: {str(e)}")
-        raise
-
 # Discord event: Handle bot startup
 @bot.event
 async def on_ready():
@@ -196,17 +179,13 @@ async def on_message(message):
     if should_process and content:
         async with message.channel.typing():
             if is_image_generation_request(content):
-                try:
-                    # Generate image and reply with URL
-                    image_url = await generate_image(content)
-                    await message.reply(f"Generated image: {image_url}", mention_author=False)
-                    # Update conversation history
-                    conversation_history[history_key].extend([
-                        {"role": "user", "content": content},
-                        {"role": "assistant", "content": f"Generated image: {image_url}"}
-                    ])
-                except OpenAIError as e:
-                    await message.reply(f"[Image Error] {str(e)}", mention_author=False)
+                # Reply that image generation is not supported
+                await message.reply("Image generation is not supported.", mention_author=False)
+                # Update conversation history
+                conversation_history[history_key].extend([
+                    {"role": "user", "content": content},
+                    {"role": "assistant", "content": "Image generation is not supported."}
+                ])
             else:
                 # Add user message to history
                 conversation_history[history_key].append({"role": "user", "content": content})
