@@ -1,124 +1,93 @@
-# Grok Discord Bot
+# Discord Grok Bot
 
-This Discord bot uses the Grok API from xAI to provide conversational responses, generate images, and process PDF attachments. It responds to mentions or replies, handles uploaded PDFs by extracting text, and acknowledges image uploads. The bot maintains conversation history per user and channel and logs errors to the console without persistent storage.
+A Discord bot powered by xAI's Grok API, designed to respond to user queries, process PDF attachments, and maintain conversation history. The bot responds to mentions or replies, handles text-based questions, and extracts text from PDFs for further processing. Image handling and generation are not supported.
 
 ## Features
-- **Text Responses**: Answers questions or processes text input using the Grok API (`grok-3-beta`), with short responses for simple questions (e.g., “What is AI?”) and detailed answers for complex queries.
-- **Image Generation**: Creates images via the Grok API (`flux.1`) for requests like “generate image of a cat” and returns a URL.
-- **PDF Processing**: Extracts text from uploaded PDFs (up to 3000 characters, 5 pages) and uses it as message content for Grok responses.
-- **Image Upload Handling**: Acknowledges uploaded images (`.jpg`, `.jpeg`, `.png`) with a placeholder response (analysis not supported).
-- **Conversation History**: Tracks per-user, per-channel history, truncated at 100,000 characters to maintain context.
-- **Console-Only Logging**: Logs errors (e.g., API failures, PDF issues) to the console using `logging.ERROR`, with no disk storage.
-- **Custom Activity**: Displays a custom activity status (default: “Change Me”).
-- **Server Terminology**: Uses “server” instead of “guild” in logs and documentation for clarity.
+- **Text Responses**: Answers user queries using the Grok API, with concise responses for simple questions and detailed answers for complex ones.
+- **PDF Processing**: Extracts text from uploaded PDF files (up to 5 pages, 3000 characters) and responds based on the content.
+- **Conversation History**: Maintains user-specific conversation history per channel, capped at 100,000 characters.
+- **Error Handling**: Logs errors and provides user-friendly error messages for API issues or invalid inputs.
+- **Restricted Image Handling**: Ignores images unless directly sent to the bot, replying with "Image handling is not supported." Ignores image generation requests with "Image generation is not supported."
 
-## Setup Instructions
+## Prerequisites
+- Python 3.8 or higher
+- Discord bot token (obtain from [Discord Developer Portal](https://discord.com/developers/applications))
+- xAI Grok API key (obtain from [xAI](https://x.ai/api))
+- Required Python packages:
+  - `discord.py`
+  - `PyPDF2`
+  - `python-dotenv`
+  - `openai`
 
-### Prerequisites
-- **Python 3.8+**: Ensure Python is installed (`python --version` or `python3 --version`).
-- **Discord Bot Token**: Create a bot at [Discord Developer Portal](https://discord.com/developers/applications).
-- **Grok API Key**: Obtain from xAI at [https://x.ai/api](https://x.ai/api).
-- **GitHub Repository**: Clone or download this repository to your local machine.
-
-### Steps
-1. **Clone the Repository**
+## Installation
+1. **Clone the Repository** (or download the code):
    ```bash
-   git clone https://github.com/your-username/grok-discord-bot.git
-   cd grok-discord-bot
+   git clone <repository-url>
+   cd <repository-directory>
    ```
-
-2. **Create and Configure `.env`**
+2. **Install Dependencies**:
+   ```bash
+   pip install discord.py PyPDF2 python-dotenv openai
+   ```
+3. **Set Up Environment Variables**:
    - Create a `.env` file in the project root.
-   - Add your Discord bot token and Grok API key:
+   - Add the following:
      ```env
      DISCORD_TOKEN=your_discord_bot_token
      GROK_API_KEY=your_grok_api_key
      ```
-   - Replace `your_discord_bot_token` with your bot’s token from the Discord Developer Portal.
-   - Replace `your_grok_api_key` with your API key from xAI.
-   - Example `.env`:
-     ```env
-     DISCORD_TOKEN=MTAzMjE2NjE3NjEyMzQ1Njc4.YcZx9w.ABC123xyz
-     GROK_API_KEY=your_grok_key
-     ```
-   - Save `.env` and keep it secure (excluded by `.gitignore`).
-
-3. **Install Dependencies**
-   ```bash
-   pip install discord.py python-dotenv PyPDF2 openai
-   ```
-   - Ensure `pip` matches your Python version (try `pip3` or `python3 -m pip` if needed).
-   - Dependencies:
-     - `discord.py`: Discord API interaction.
-     - `python-dotenv`: Load `.env` variables.
-     - `PyPDF2`: PDF text extraction.
-     - `openai`: Grok API client (used with xAI endpoint).
-
-4. **Run the Bot**
+   - Replace `your_discord_bot_token` and `your_grok_api_key` with your actual tokens.
+4. **Run the Bot**:
    ```bash
    python bot.py
    ```
-   - Or use `python3 bot.py` if required.
-   - The bot will log in, set its activity to “Change Me”, and start processing messages.
-
-5. **Invite the Bot to Servers**
-   - In the Discord Developer Portal, go to **OAuth2 > URL Generator**.
-   - Select `bot` scope and the **Send Messages** permission.
-   - Copy the generated URL and use it to invite the bot to your servers.
-   - Ensure the bot has “Send Messages” permission in each server.
-
-6. **Verify Bot Behavior**
-   - Check console logs for startup:
-     ```
-     2025-05-18 21:36:45,123 - ERROR - ✅ Logged in as Bot#1234 (ID: 123456789012345678)
-     ```
-   - In Discord, test by:
-     - Mentioning the bot: `@Bot What is AI?`
-     - Replying to a bot message.
-     - Uploading a PDF to process its text.
-     - Requesting an image: `@Bot generate image of a cat`.
-   - Confirm the bot’s activity is “Change Me” and responses are sent (text, image URLs, or error messages).
-   - Logs show errors only (e.g., “Grok API error”, “PDF error”).
 
 ## Usage
-- **Text Queries**: Mention the bot (e.g., `@Bot`) or reply to its messages with questions or prompts.
-  - Simple questions (e.g., “What is AI?”) get 2-3 sentence responses (<350 chars).
-  - Complex queries get detailed answers (<1800 chars).
-- **Image Generation**: Use commands like “generate image of [description]” to get an image URL.
-- **PDF Uploads**: Attach a PDF; the bot extracts text (up to 3000 chars, 5 pages) and processes it as the message content.
-- **Image Uploads**: Upload `.jpg`, `.jpeg`, or `.png` files; the bot responds with “Image uploaded: [filename] (analysis not supported)”.
+1. **Invite the Bot**:
+   - Add the bot to your Discord server using the OAuth2 URL generated in the Discord Developer Portal (ensure `bot` scope and permissions for `Send Messages`, `Read Messages`, and `Read Message History`).
+2. **Interact with the Bot**:
+   - **Mention the Bot**: Use `@BotName <query>` to ask a question or upload a PDF.
+   - **Reply to the Bot**: Reply to a bot message to continue the conversation.
+   - **Upload PDFs**: Attach a PDF file with a mention or reply to process its content.
+   - **Image Restrictions**: If an image is uploaded directly, the bot replies "Image handling is not supported." Image generation requests (e.g., "generate an image") receive "Image generation is not supported."
+3. **Examples**:
+   - `@BotName What is the capital of France?` → Responds with a short answer.
+   - `@BotName Explain quantum mechanics` → Provides a concise explanation.
+   - `@BotName` with a PDF attachment → Extracts and processes PDF text.
+   - `@BotName generate an image of a cat` → Replies "Image generation is not supported."
+   - `@BotName` with a `.png` attachment → Replies "Image handling is not supported."
+
+## Configuration
+The bot uses the following constants (defined in `bot.py`):
+- `MODEL`: `grok-3-beta` (Grok model for text responses).
+- `MAX_RESPONSE_TOKENS`: 400 (max tokens for Grok responses).
+- `DISCORD_MAX_CHARS`: 1800 (max characters for Discord messages).
+- `MAX_HISTORY_CHARS`: 100,000 (max characters for conversation history).
+
+## Limitations
+- **Image Support**: The bot does not process or generate images, responding with appropriate messages for such requests.
+- **PDF Limits**: Processes up to 5 pages or 3000 characters from PDFs.
+- **API Dependency**: Requires a valid xAI Grok API key and stable internet connection.
+- **Discord Limits**: Responses are capped at 1800 characters due to Discord's message length restrictions.
 
 ## Troubleshooting
-- **Bot Doesn’t Start**
-  - Check `.env` for correct `DISCORD_TOKEN` and `GROK_API_KEY`.
-  - Verify dependencies: `pip install discord.py python-dotenv PyPDF2 openai`.
-  - Ensure Python 3.8+: `python --version`.
-  - Look for logs like “ValueError: Missing required environment variables”.
-
-- **Bot Doesn’t Respond**
-  - Check logs for “Grok API error” (invalid API key, quota exceeded) or “Error: ...”.
-  - Ensure bot is mentioned (e.g., `@Bot`) or replied to.
-  - Verify “Send Messages” permission in the server.
-  - Test Grok API with a simple script (contact xAI for docs).
-
-- **PDF Processing Fails**
-  - Logs show “PDF error” or “No text extracted from PDF” if the PDF is empty or malformed.
-  - Ensure the PDF has extractable text (not scanned images).
-  - Try a different PDF or limit to 5 pages.
-
-- **Image Generation Fails**
-  - Logs show “Image generation error” for invalid prompts or API issues.
-  - Ensure prompt starts with “generate/create/draw” and includes “image/picture/art” (e.g., “generate image of a cat”).
-  - Check Grok API key and quota.
-
-- **Logs**
-  - All logs are console-only, using `logging.ERROR`.
-  - Example errors: “Grok API error: Invalid API key”, “PDF error: Invalid PDF structure”.
-  - Note: Login uses `logger.error` (unusual for non-errors, as coded).
+- **Bot Not Responding**:
+  - Check the console for error logs (errors are logged with timestamps).
+  - Ensure `DISCORD_TOKEN` and `GROK_API_KEY` are correctly set in `.env`.
+  - Verify the bot has necessary Discord permissions.
+- **PDF Errors**: Ensure the PDF is not corrupted or password-protected.
+- **API Errors**: Confirm your Grok API key is valid and has sufficient quota (see [xAI API](https://x.ai/api)).
 
 ## Contributing
-- Fork the repository and submit pull requests for improvements.
-- Suggest features (e.g., image analysis, custom activity via `.env`).
+Contributions are welcome! Please:
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/YourFeature`).
+3. Commit changes (`git commit -m 'Add YourFeature'`).
+4. Push to the branch (`git push origin feature/YourFeature`).
+5. Open a pull request.
 
 ## License
-MIT License. See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See the `LICENSE` file for details (if applicable).
+
+## Contact
+For issues or feature requests, create an issue on the repository or contact the maintainer.
