@@ -1,4 +1,4 @@
-# Discord Grok Bot
+# Grok Discord Bot
 
 A Discord bot powered by xAI's Grok API, designed to respond to user queries, process PDF attachments, and maintain conversation history. The bot responds to mentions or replies, handles text-based questions, and extracts text from PDFs for further processing. Image handling and generation are not supported.
 
