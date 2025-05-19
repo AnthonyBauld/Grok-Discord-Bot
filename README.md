@@ -46,16 +46,16 @@ A Discord bot powered by xAI's Grok API, designed to respond to user queries, pr
 1. **Invite the Bot**:
    - Add the bot to your Discord server using the OAuth2 URL generated in the Discord Developer Portal (ensure `bot` scope and permissions for `Send Messages`, `Read Messages`, and `Read Message History`).
 2. **Interact with the Bot**:
-   - **Mention the Bot**: Use `@BotName <query>` to ask a question or upload a PDF.
+   - **Mention the Bot**: Use `@Bot <query>` to ask a question or upload a PDF.
    - **Reply to the Bot**: Reply to a bot message to continue the conversation.
    - **Upload PDFs**: Attach a PDF file with a mention or reply to process its content.
    - **Image Restrictions**: If an image is uploaded directly, the bot replies "Image handling is not supported." Image generation requests (e.g., "generate an image") receive "Image generation is not supported."
 3. **Examples**:
-   - `@BotName What is the capital of France?` → Responds with a short answer.
-   - `@BotName Explain quantum mechanics` → Provides a concise explanation.
-   - `@BotName` with a PDF attachment → Extracts and processes PDF text.
-   - `@BotName generate an image of a cat` → Replies "Image generation is not supported."
-   - `@BotName` with a `.png` attachment → Replies "Image handling is not supported."
+   - `@Bot What is the capital of France?` → Responds with a short answer.
+   - `@Bot Explain quantum mechanics` → Provides a concise explanation.
+   - `@Bot` with a PDF attachment → Extracts and processes PDF text.
+   - `@Bot generate an image of a cat` → Replies "Image generation is not supported."
+   - `@Bot` with a `.png` attachment → Replies "Image handling is not supported."
 
 ## Configuration
 The bot uses the following constants (defined in `bot.py`):
