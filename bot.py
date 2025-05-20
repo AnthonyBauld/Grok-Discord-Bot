@@ -59,12 +59,25 @@ def is_image_generation_request(content: str) -> bool:
 def is_simple_question(content: str) -> bool:
     """Identify short or simple questions for brief responses."""
     content = content.lower().strip()
-    # Consider short messages (<10 words) as simple
-    if len(content.split()) < 10:
+
+    # Consider very short messages (< 8 words) as simple
+    if len(content.split()) < 8:
         return True
-    # Check for simple question starters
-    simple_keywords = ['what is', 'who is', 'when is', 'where is', 'how many', 'define']
-    return any(content.startswith(keyword) for keyword in simple_keywords)
+
+    # Check for simple question starters and common short phrases
+    simple_keywords = [
+        'what is', 'who is', 'when is', 'where is', 'how many', 'define',
+        'explain', 'tell me about', 'what are', 'can you tell me', 'is it',
+        'what\'s', 'who\'s', 'why is', 'how does', 'what\'s the'
+    ]
+    if any(content.startswith(keyword) for keyword in simple_keywords):
+        return True
+
+    # Check for questions that are very short and end with a question mark
+    if len(content.split()) <= 5 and content.endswith('?'):
+        return True
+
+    return False
 
 # Utility function: Truncate conversation history
 def truncate_history(messages: list, max_chars: int) -> list:
@@ -85,9 +98,9 @@ def truncate_history(messages: list, max_chars: int) -> list:
 def build_system_prompt(is_simple: bool) -> tuple:
     """Create system prompt and max tokens based on question type."""
     if is_simple:
-        # Short prompt for simple questions
-        prompt = "Answer in 2-3 sentences, under 350 chars. Be direct, use plain language."
-        max_tokens = 100
+        # Short prompt for simple questions, emphasizing extreme brevity
+        prompt = "Provide a very brief, direct answer (1-2 sentences, max 200 characters). Use plain language."
+        max_tokens = 70 # Reduced tokens to enforce brevity
     else:
         # Default prompt for detailed responses
         prompt = "Answer concisely, under 1800 chars. Focus on main points."
