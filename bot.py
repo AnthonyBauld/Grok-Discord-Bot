@@ -35,7 +35,7 @@ client = AsyncOpenAI(
 )
 
 # Define constants for bot configuration
-MODEL = "grok-3-beta"            # Grok model for text responses
+MODEL = "grok-3"            # Grok model for text responses
 MAX_RESPONSE_TOKENS = 400        # Max tokens for Grok responses
 DISCORD_MAX_CHARS = 1800         # Max characters for Discord messages
 MAX_HISTORY_CHARS = 100000       # Max characters for conversation history
